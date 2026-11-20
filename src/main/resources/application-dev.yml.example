@@ -1,0 +1,36 @@
+# 开发环境配置模板。
+# 使用方法：复制本文件为 application-dev.yml（真实文件已被 .gitignore 忽略，
+# 避免本机密码进公开仓库），把 password 改成你自己的数据库口令。
+# 依赖：本机 MySQL（库名 power_ai，执行 sql/schema.sql 建表）、Redis、RabbitMQ。
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/power_ai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: root
+    password: "你的MySQL密码"
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+mybatis-plus:
+  configuration:
+    # 开发环境打印 SQL，生产关掉
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+app:
+  seeder:
+    # 仅开发环境开启演示数据初始化，生产环境不配置（默认关闭）
+    enabled: true
+  mq:
+    # 工单超时 TTL(毫秒)：dev 用 60 秒方便演示超时升级；生产环境配 7200000 = 2 小时
+    order-ttl: 60000
+  assessment:
+    # 验证跑批效果时临时放开下面这行（每分钟跑一次），看完日志改回 1 点
+    # cron: "0 * * * * ?"

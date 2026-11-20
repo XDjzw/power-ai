@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: power-ai
+  profiles:
+    active: dev
+  rabbitmq:
+    # 可靠性第一件：生产者 confirm（correlated = 每条消息带 CorrelationData 单独回调）
+    publisher-confirm-type: correlated
+    # 不可路由的消息退回生产者触发 ReturnsCallback，而不是被 broker 静默丢弃
+    publisher-returns: true
+    listener:
+      simple:
+        # 可靠性第二件：消费者手动 ack——业务处理成功才确认，失败不确认消息留在队列
+        acknowledge-mode: manual
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+app:
+  assessment:
+    # 考核跑批调度：每天凌晨 1 点（秒 分 时 日 月 周）
+    cron: "0 0 1 * * ?"
+    # 欠进度判定系数：发电进度 < 时间进度 × behind-factor → BEHIND
+    behind-factor: 0.9
+    # 每月前 N 天不考核：月初时间进度≈0，全部电站会被误判欠进度
+    min-day: 3
+  jwt:
+    # HS256 签名密钥：至少 32 字节（jjwt 强制）。生产环境必须走环境变量/配置中心，严禁写死
+    secret: "power-ai-jwt-secret-2026-dev-only-do-not-use-in-prod"
+    # token 有效期（小时）
+    expire-hours: 24
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  global-config:
+    banner: false
+    db-config:
+      # 全局逻辑删除：所有表带 deleted 字段，deleteById 自动变 UPDATE
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0

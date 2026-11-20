@@ -1,0 +1,17 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+.idea/
+*.iml
+.vscode/
+
+logs/
+*.log
+
+application-local.yml
+# 本机开发配置含真实数据库密码，不入库；模板见 application-dev.yml.example
+application-dev.yml
+
+.claude/
