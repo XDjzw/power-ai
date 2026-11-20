@@ -1,7 +1,14 @@
 # 开发环境配置模板。
 # 使用方法：复制本文件为 application-dev.yml（真实文件已被 .gitignore 忽略，
 # 避免本机密码进公开仓库），把 password 改成你自己的数据库口令。
-# 依赖：本机 MySQL（库名 power_ai，执行 sql/schema.sql 建表）、Redis、RabbitMQ。
+# 依赖：
+#   1. 本机 MySQL（库名 power_ai，执行 sql/schema.sql 建表）、Redis、RabbitMQ。
+#   2. 向量库 PostgreSQL + pgvector（阶段1 RAG 用）：WSL2 内运行
+#      docker run -d --name power-pg -e POSTGRES_USER=postgres \
+#        -e POSTGRES_PASSWORD=power123456 -e POSTGRES_DB=power_ai \
+#        -p 5433:5432 -v power-pgdata:/var/lib/postgresql/data \
+#        --restart unless-stopped pgvector/pgvector:pg17
+#      （5432 端口如被其他项目占用，用 5433 映射避开）
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -18,6 +25,17 @@ spring:
     port: 5672
     username: guest
     password: guest
+  ai:
+    dashscope:
+      # 通义千问 API Key：百炼控制台 bailian.console.aliyun.com → API-KEY 管理
+      api-key: "你的DashScope_API_Key"
+      chat:
+        options:
+          model: qwen-plus
+      embedding:
+        options:
+          model: text-embedding-v4
+          dimensions: 1024
 
 mybatis-plus:
   configuration:
@@ -25,6 +43,12 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 app:
+  pg:
+    # 向量库连接（见文件头部的 docker run 说明）
+    url: jdbc:postgresql://localhost:5433/power_ai
+    username: postgres
+    password: "你的PG密码"
+    driver-class-name: org.postgresql.Driver
   seeder:
     # 仅开发环境开启演示数据初始化，生产环境不配置（默认关闭）
     enabled: true
