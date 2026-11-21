@@ -1,7 +1,7 @@
 # 电力智能服务平台（power-ai）开发计划
 
 > 新能源发电运营平台 + AI Agent 层：传统 Java 底座 + 知识问答（RAG）+ 智能问数（NL2SQL）
-> 更新日期：2026-11-19
+> 更新日期：2026-11-21
 
 ## 阶段总览
 
@@ -13,7 +13,7 @@
 | 0-4 | 工单 + MQ | 状态机 + RabbitMQ 通知 / 超时升级 | ✅ |
 | 0-5 | 考核跑批 | 月计划进度考核 + 欠进度告警 | ✅ |
 | 0-6 | JWT 权限 | 三角色登录鉴权 | ✅ |
-| 1 | RAG 知识问答 | 新能源知识库 + 双路召回 + 引用溯源 | ⬜ |
+| 1 | RAG 知识问答 | 新能源知识库 + 双路召回 + 引用溯源 | 🚧 |
 | 2 | NL2SQL 智能问数 | 三层召回 + 自纠错 loop + SQL 安全 | ⬜ |
 | 3 | Agent 运行时 | 意图路由 / 工具系统 / 多轮会话 / SSE | ⬜ |
 | 4 | 评测打磨 | 测试集 / 消融数据 / 缓存 / 简历指标 | ⬜ |
@@ -48,11 +48,44 @@
 
 ## 阶段 1：RAG 知识问答
 
-- 知识库：新能源业务文档（限电/弃风政策、厂用电率定义、计划考核规则、设备故障术语）整理成 Markdown
-- 链路：条款分块 → embedding → pgvector → **双路召回**（向量 + 自研 BM25/HanLP）→ **RRF 融合** → ChatClient 生成**带引用**答案
-- 自研组件：`PolicyDocumentSplitter` / `Bm25Index` / `RrfFusion`
-- 前置：装 PostgreSQL + pgvector
-- 评测：50-100 问测试集，单路 vs 双路召回准确率对比
+链路：条款分块 → embedding → pgvector → **双路召回**（向量 + 自研 BM25）→ **RRF 融合** → qwen-plus 生成**带引用**答案。
+自研组件：`PolicyDocumentSplitter` / `Bm25Index` / `RrfFusion`。
+模型方案：百炼 DashScope（qwen-plus 对话 + text-embedding-v4 向量化 1024 维），检索与存储全部自研自管（不用平台托管知识库）。
+
+### 1-1 知识库整理 ✅
+- `docs/knowledge/` 6 篇条款化 Markdown：
+  - 平台规则类 4 篇（从系统真实逻辑提炼，问答与系统行为一致）：月度计划考核规则 / 限电与弃风 / 厂用电与电量口径 / 设备故障与工单管理
+  - 行业知识类 2 篇（整理自权威公开来源，非自编）：设备结构与故障处置（二十五项反措 2023 版 + FMEA 文献 + 光伏运维统计）/ 新能源发电基础与消纳（贝茨极限 + 807 号消纳机制文件 + 弃风弃光公开数据）
+- 每篇带"适用范围"与来源标注，生成答案的引用可溯源
+
+### 1-2 基础设施 ✅
+- PostgreSQL 17.12 + pgvector 0.8.7：Docker 路线（WSL2 dockerd，容器 power-pg 映射 **5433**，
+  5432 被电商助手项目占用）；conda 路线因旧版求解器解不动依赖已放弃
+- pom 引入 spring-ai-bom 1.1.8 + dashscope starter 1.1.2.3 + pgvector starter
+- `PgVectorConfig`：PG 独立 JdbcTemplate + PgVectorStore（业务 MySQL 主数据源不动，
+  PG 连接不注册 DataSource Bean，否则 DataSourceAutoConfiguration 退让导致业务层查错库）
+- 启动自动建表 `rag_document`（uuid / content / metadata json / embedding vector(1024) + HNSW 余弦索引）
+
+### 1-3 PolicyDocumentSplitter 分块器（自研）⬜
+- 按 Markdown 标题层级分块：每个 `##` 小节一个块，块元数据带完整标题链（如"月度计划考核规则 > 判定规则"）
+- 超长小节按段落二次切分；标题链即生成答案时的引用出处
+
+### 1-4 知识入库 ⬜
+- 分块 → text-embedding-v4（1024 维）→ PgVectorStore 写入
+- 幂等可重跑（重灌前清表）；启动时自动检查"表空则入库"
+
+### 1-5 双路召回 ⬜
+- 向量召回：pgvector HNSW 余弦相似度 top-K
+- 关键词召回：自研 `Bm25Index`（内存索引，分块后建，启动时加载）
+
+### 1-6 RRF 融合 + 带引用生成 ⬜
+- 自研 `RrfFusion` 融合两路结果（RRF 公式，k=60）
+- qwen-plus 生成：prompt 附带召回条款 + 标题链，答案末尾列引用出处
+- REST 接口 `/api/rag/ask`（阶段 3 再接 SSE 流式）
+
+### 1-7 评测 ⬜
+- 50-100 问测试集（覆盖四篇文档，含"系统真实数据"类问题）
+- 单路 vs 双路召回命中率对比 + 生成答案引用正确率 → 简历量化指标
 
 ## 阶段 2：NL2SQL 智能问数
 
@@ -83,4 +116,4 @@
 ## 待办依赖
 
 - [x] RabbitMQ 安装（原生安装 D:\rabbitmq 4.1.4，管理台 15672 已开启）
-- [ ] PostgreSQL + pgvector 安装（阶段 1 前）
+- [x] PostgreSQL + pgvector 安装（Docker 路线：WSL dockerd + power-pg 容器，端口 5433）
