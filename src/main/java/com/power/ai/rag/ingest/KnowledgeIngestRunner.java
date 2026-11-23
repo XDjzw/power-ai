@@ -12,8 +12,12 @@ import org.springframework.stereotype.Component;
  *
  * 时机：ApplicationRunner 在所有 Bean 初始化完成后执行，
  * 此时 PgVectorStore 已建好表（initializeSchema），入库不会撞上"表不存在"。
- * 策略：app.rag.reindex=true 强制全量重灌；否则仅当向量表为空才入库——
- * 日常重启不重复向量化（省 embedding 调用），想刷数据显式开 reindex。
+ *
+ * 三分支策略：
+ * 1. app.rag.reindex=true → 强制全量重灌（改知识库后想整体刷新用）；
+ * 2. 向量表为空（首启/清库后）→ 全量入库；
+ * 3. 表非空 → 增量同步：按文件 SHA-256 指纹比对，只重灌新增/变更的文档，
+ *    删除磁盘上已消失的文档，其余一个 embedding 都不调。
  */
 @Slf4j
 @Component
@@ -26,14 +30,14 @@ public class KnowledgeIngestRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         if (ragProperties.isReindex()) {
-            log.info("app.rag.reindex=true，强制重灌知识库");
+            log.info("app.rag.reindex=true，强制全量重灌知识库");
             ingestService.ingestAll();
             return;
         }
         if (ingestService.isEmpty()) {
             ingestService.ingestAll();
         } else {
-            log.info("向量表已有数据，跳过自动入库（如需重灌设置 app.rag.reindex=true）");
+            ingestService.ingestIncrementally();
         }
     }
 }

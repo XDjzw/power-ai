@@ -72,10 +72,11 @@
 - 单元测试直接对 6 篇真实文档验证：35 块、无超长块、标题链完整
 
 ### 1-4 知识入库 ✅
-- `KnowledgeIngestService`：扫描 docs/knowledge/ → 分块 → PgVectorStore.add（内部自动向量化）；重灌前清表，幂等可重跑
-- `KnowledgeIngestRunner`：启动自动入库——reindex=true 强制重灌，否则仅表空时入库
+- `KnowledgeIngestService`：全量重灌 + **增量同步**双模式；登记表 `rag_doc_registry` 记录每篇文档的 SHA-256 指纹
+- `KnowledgeIngestRunner`：启动三分支——reindex=true 全量重灌；向量表空全量入库；否则增量比对（新增/变更/删除/跳过），文档没动一个 embedding 都不调（实测 16ms）
+- 崩溃一致性：删旧块 → 写新块 → 最后更新登记，任一步失败下次启动按指纹自动重灌该文件；目录空时拒绝清库（防 knowledge-dir 配错）
 - 踩坑：text-embedding-v4 批量上限，客户端断言 25 条、服务端实际 10 条（400），按 10 分批写入
-- 验证：35 块落库、全部 1024 维、metadata 标题链完整
+- 验证：35 块落库、全部 1024 维；新增/删除文档两条增量路径实测通过（38 → 35 块复原）
 
 ### 1-5 双路召回 ⬜
 - 向量召回：pgvector HNSW 余弦相似度 top-K
