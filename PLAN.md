@@ -1,7 +1,7 @@
 # 电力智能服务平台（power-ai）开发计划
 
 > 新能源发电运营平台 + AI Agent 层：传统 Java 底座 + 知识问答（RAG）+ 智能问数（NL2SQL）
-> 更新日期：2026-11-21
+> 更新日期：2026-11-23
 
 ## 阶段总览
 
@@ -66,13 +66,16 @@
   PG 连接不注册 DataSource Bean，否则 DataSourceAutoConfiguration 退让导致业务层查错库）
 - 启动自动建表 `rag_document`（uuid / content / metadata json / embedding vector(1024) + HNSW 余弦索引）
 
-### 1-3 PolicyDocumentSplitter 分块器（自研）⬜
-- 按 Markdown 标题层级分块：每个 `##` 小节一个块，块元数据带完整标题链（如"月度计划考核规则 > 判定规则"）
-- 超长小节按段落二次切分；标题链即生成答案时的引用出处
+### 1-3 PolicyDocumentSplitter 分块器（自研）✅
+- 按 Markdown 标题层级分块：每个 `##` 小节一个块，`###` 子小节并入不拆；块元数据带完整标题链（source/title/section/subsection/titleChain/chunkIndex）
+- 标题链前置拼进正文参与向量编码（Contextual Retrieval 的零成本替代方案）；超长小节（>600 字符）按段落贪婪装箱二次切分，表格不硬切
+- 单元测试直接对 6 篇真实文档验证：35 块、无超长块、标题链完整
 
-### 1-4 知识入库 ⬜
-- 分块 → text-embedding-v4（1024 维）→ PgVectorStore 写入
-- 幂等可重跑（重灌前清表）；启动时自动检查"表空则入库"
+### 1-4 知识入库 ✅
+- `KnowledgeIngestService`：扫描 docs/knowledge/ → 分块 → PgVectorStore.add（内部自动向量化）；重灌前清表，幂等可重跑
+- `KnowledgeIngestRunner`：启动自动入库——reindex=true 强制重灌，否则仅表空时入库
+- 踩坑：text-embedding-v4 批量上限，客户端断言 25 条、服务端实际 10 条（400），按 10 分批写入
+- 验证：35 块落库、全部 1024 维、metadata 标题链完整
 
 ### 1-5 双路召回 ⬜
 - 向量召回：pgvector HNSW 余弦相似度 top-K

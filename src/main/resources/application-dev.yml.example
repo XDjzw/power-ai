@@ -49,6 +49,11 @@ app:
     username: postgres
     password: "你的PG密码"
     driver-class-name: org.postgresql.Driver
+  rag:
+    # 知识库文档目录（相对项目根目录）
+    knowledge-dir: docs/knowledge
+    # 启动时强制全量重灌向量库；日常置 false，仅向量表为空时自动入库
+    reindex: false
   seeder:
     # 仅开发环境开启演示数据初始化，生产环境不配置（默认关闭）
     enabled: true
